@@ -1,0 +1,8 @@
+[package]
+name = "rusty_markov_traffic"
+version = "0.1.0"
+authors = ["Tin Rabzelj <tin@flinect.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7.3"
