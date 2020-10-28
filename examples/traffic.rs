@@ -1,4 +1,4 @@
-use rusty_markov_traffic::{Action, MarkovChain};
+use rusty_markov_traffic::MarkovChain;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum UserAction {
@@ -8,8 +8,6 @@ enum UserAction {
     DeleteTodo,
     ListTodos,
 }
-
-impl Action for UserAction {}
 
 fn main() {
     let mut chain = MarkovChain::new(1);
@@ -22,23 +20,35 @@ fn main() {
         UserAction::SignIn,
         UserAction::ListTodos,
         UserAction::DeleteTodo,
+        UserAction::DeleteTodo,
         UserAction::CreateTodo,
         UserAction::CreateTodo,
         UserAction::SignOut,
         UserAction::SignIn,
         UserAction::ListTodos,
+        UserAction::CreateTodo,
         UserAction::DeleteTodo,
+        UserAction::CreateTodo,
         UserAction::DeleteTodo,
+        UserAction::ListTodos,
         UserAction::DeleteTodo,
         UserAction::SignOut,
     ];
     chain.update(&actions);
 
-    for _ in 0..16 {
-        let action = chain.generate(true).unwrap();
+    // Generate N events
+    for action in chain.iter().take(16) {
         if action == UserAction::SignIn {
             println!("## New session ##");
         }
         println!("{:?}", action);
     }
+
+    // Generate until SignOut
+    // for action in chain
+    //     .iter()
+    //     .take_while(|action| *action != UserAction::SignOut)
+    // {
+    //     println!("{:?}", action);
+    // }
 }

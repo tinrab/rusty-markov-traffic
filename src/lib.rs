@@ -1,65 +1,71 @@
 use std::collections::BTreeMap;
-use std::fmt::Debug;
 
 use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
 
-pub trait Action: Clone + PartialEq + Eq + Ord + Debug {}
-
-#[derive(Debug, Clone, Default)]
-pub struct MarkovChain<A: Action> {
-    occurrences: BTreeMap<Vec<A>, BTreeMap<A, usize>>,
+#[derive(Clone)]
+pub struct MarkovChain<T>
+where
+    T: Clone + Ord,
+{
     order: usize,
-    memory: Vec<A>,
+    occurrences: BTreeMap<Vec<T>, BTreeMap<T, usize>>,
+    memory: Vec<T>,
     rng: ThreadRng,
 }
 
-impl<A: Action> MarkovChain<A> {
+impl<T> MarkovChain<T>
+where
+    T: Clone + Ord,
+{
     pub fn new(order: usize) -> Self {
         assert!(order > 0);
         MarkovChain {
-            occurrences: BTreeMap::new(),
             order,
+            occurrences: BTreeMap::new(),
             memory: Vec::with_capacity(order),
             rng: ThreadRng::default(),
         }
     }
 
-    pub fn update(&mut self, actions: &[A]) {
-        let actions: Vec<_> = actions.to_vec();
-        for history in actions.windows(self.order + 1) {
+    pub fn update(&mut self, events: &[T]) {
+        let events: Vec<_> = events.to_vec();
+        for history in events.windows(self.order + 1) {
             // Split window to 0..N-1 and N
             let previous = history[0..self.order].to_vec();
             let current = history.last().cloned().unwrap();
 
-            // Count occurrence for current action
-            let occurrences = self.occurrences.entry(previous).or_default();
-            let count = occurrences.entry(current).or_default();
-            *count += 1;
+            // Count occurrence for current event
+            self.occurrences
+                .entry(previous)
+                .or_default()
+                .entry(current)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
         }
 
         // Update internal memory
         self.memory.reserve(self.order);
-        for action in actions.into_iter().rev().take(self.order) {
-            self.memory.insert(0, action);
+        for event in events.into_iter().rev().take(self.order) {
+            self.memory.insert(0, event);
         }
         self.memory.truncate(self.order);
     }
 
-    pub fn generate_from(&mut self, memory: &[A]) -> Option<A> {
+    pub fn generate_from(&mut self, memory: &[T]) -> Option<T> {
         assert_eq!(memory.len(), self.order, "invalid memory size");
 
         if let Some(occurrences) = self.occurrences.get(memory) {
-            // Get number of occurrences for each known action
+            // Get number of occurrences for each known event. We need a Vec for `SliceRandom::choose_weighted`.
             let occurrence_counts: Vec<_> = occurrences
                 .iter()
-                .map(|(action, count)| (action.clone(), *count))
+                .map(|(event, count)| (event.clone(), *count))
                 .collect();
 
-            // Chose a random action based on its count
+            // Chose a random event based on its count
             occurrence_counts
                 .choose_weighted(&mut self.rng, |(_, count)| *count)
-                .map(|(action, _)| action)
+                .map(|(event, _)| event)
                 .ok()
                 .cloned()
         } else {
@@ -68,7 +74,7 @@ impl<A: Action> MarkovChain<A> {
         }
     }
 
-    pub fn generate(&mut self, update_memory: bool) -> Option<A> {
+    pub fn generate(&mut self, update_memory: bool) -> Option<T> {
         let last_memory = self.memory.clone();
         if let Some(next) = self.generate_from(&last_memory) {
             if update_memory {
@@ -76,11 +82,32 @@ impl<A: Action> MarkovChain<A> {
                 self.memory.insert(0, next.clone());
                 self.memory.truncate(self.order);
             }
-
             Some(next)
         } else {
             None
         }
+    }
+
+    pub fn iter(&mut self) -> MarkovChainIter<T> {
+        MarkovChainIter { chain: self }
+    }
+}
+
+pub struct MarkovChainIter<'a, T>
+where
+    T: Clone + Ord,
+{
+    chain: &'a mut MarkovChain<T>,
+}
+
+impl<'a, T> Iterator for MarkovChainIter<'a, T>
+where
+    T: Clone + Ord,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chain.generate(true)
     }
 }
 
@@ -94,8 +121,6 @@ mod tests {
         SignOut,
         CreateTodo,
     }
-
-    impl Action for UserAction {}
 
     #[test]
     fn basic() {
